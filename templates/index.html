@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Google Drive API</title>
+</head>
+<body>
+    <h1>Google Drive API</h1>
+    <a href="{{ .AuthURL }}">Authenticate with Google</a>
+    <hr>
+    <h2>Create Folder Inside a Folder</h2>
+    <form action="/create_folder" method="post">
+        <label for="parent_folder_id">Parent Folder ID:</label>
+        <input type="text" id="parent_folder_id" name="parent_folder_id"><br><br>
+        <label for="folder_name">Folder Name:</label>
+        <input type="text" id="folder_name" name="folder_name" required><br><br>
+        <input type="submit" value="Create Folder">
+    </form>
+    <hr>
+    <h2>Upload File</h2>
+    <form action="/upload_file" method="post" enctype="multipart/form-data">
+        <label for="folder_id">Folder ID:</label>
+        <input type="text" id="folder_id" name="folder_id"><br><br>
+        <label for="file">Choose file:</label>
+        <input type="file" id="file" name="file" required><br><br>
+        <input type="submit" value="Upload File">
+    </form>
+</body>
+</html>
