@@ -1,12 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -19,6 +24,7 @@ import (
 var (
 	config *oauth2.Config
 	tok    *oauth2.Token
+	wg     sync.WaitGroup
 )
 
 func main() {
@@ -86,10 +92,17 @@ func main() {
 	})
 
 	r.POST("/upload_file", func(c *gin.Context) {
+
 		folderID := c.PostForm("folder_id")
-		file, err := c.FormFile("file")
+		form, err := c.MultipartForm()
 		if err != nil {
 			c.String(http.StatusBadRequest, "File not found in request: %v", err)
+			return
+		}
+
+		files := form.File["files"]
+		if len(files) == 0 {
+			c.String(http.StatusBadRequest, "No files found in request")
 			return
 		}
 
@@ -100,24 +113,17 @@ func main() {
 			return
 		}
 
-		f, err := file.Open()
-		if err != nil {
-			c.String(http.StatusInternalServerError, "Unable to open file: %v", err)
-			return
-		}
-		defer f.Close()
+		var fileIds []string
 
-		driveFile := &drive.File{
-			Name:    file.Filename,
-			Parents: []string{folderID},
-		}
+		go func() {
+			defer wg.Wait()
+		}()
 
-		driveFile, err = srv.Files.Create(driveFile).Media(f).Do()
-		if err != nil {
-			c.String(http.StatusInternalServerError, "Unable to upload file: %v", err)
-			return
+		for _, file := range files {
+			wg.Add(1)
+			go uploadFile(c, srv, file, folderID)
 		}
-		c.String(http.StatusOK, "File uploaded: %s\n", driveFile.Id)
+		c.String(http.StatusOK, "File uploaded: %s\n", fileIds)
 	})
 
 	r.LoadHTMLFiles("templates/index.html")
@@ -152,4 +158,49 @@ func getClient(config *oauth2.Config) *http.Client {
 		log.Fatalf("Unable to read token from file: %v", err)
 	}
 	return config.Client(context.Background(), tok)
+}
+
+func uploadFile(c *gin.Context, srv *drive.Service, file *multipart.FileHeader, folderID string) {
+	defer wg.Done()
+
+	f, err := file.Open()
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Unable to open file: %v", err)
+		return
+	}
+	defer f.Close()
+
+	cm := imageCompression(c, f)
+
+	driveFile := &drive.File{
+		Name:    file.Filename,
+		Parents: []string{folderID},
+	}
+
+	_, err = srv.Files.Create(driveFile).Media(cm).Do()
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Unable to upload file: %v", err)
+		return
+	}
+}
+
+func imageCompression(c *gin.Context, f multipart.File) *bytes.Reader {
+	img, _, err := image.Decode(f)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Unable to decode image: %v", err)
+		return nil
+	}
+
+	var buf bytes.Buffer
+
+	quality := 90
+	err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality})
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Unable to compress image: %v", err)
+		return nil
+	}
+
+	compressedImage := bytes.NewReader(buf.Bytes())
+
+	return compressedImage
 }
