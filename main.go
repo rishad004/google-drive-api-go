@@ -20,7 +20,6 @@ import (
 
 var (
 	config *oauth2.Config
-	tok    *oauth2.Token
 	wg     sync.WaitGroup
 )
 
