@@ -1,12 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"image"
-	"image/jpeg"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -170,37 +167,14 @@ func uploadFile(c *gin.Context, srv *drive.Service, file *multipart.FileHeader, 
 	}
 	defer f.Close()
 
-	cm := imageCompression(c, f)
-
 	driveFile := &drive.File{
 		Name:    file.Filename,
 		Parents: []string{folderID},
 	}
 
-	_, err = srv.Files.Create(driveFile).Media(cm).Do()
+	_, err = srv.Files.Create(driveFile).Media(f).Do()
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Unable to upload file: %v", err)
 		return
 	}
-}
-
-func imageCompression(c *gin.Context, f multipart.File) *bytes.Reader {
-	img, _, err := image.Decode(f)
-	if err != nil {
-		c.String(http.StatusInternalServerError, "Unable to decode image: %v", err)
-		return nil
-	}
-
-	var buf bytes.Buffer
-
-	quality := 90
-	err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality})
-	if err != nil {
-		c.String(http.StatusInternalServerError, "Unable to compress image: %v", err)
-		return nil
-	}
-
-	compressedImage := bytes.NewReader(buf.Bytes())
-
-	return compressedImage
 }
